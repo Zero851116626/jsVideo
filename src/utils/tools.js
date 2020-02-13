@@ -37,3 +37,14 @@ export function dealTimeFormat(mm){
 export function getDomStyle(node){
   return node.getBoundingClientRect()
 }
+
+/**
+ * 检测点击返回方法
+ * params:
+ *  @el node 需要检测的节点
+ *  @mouseEvent obj 点击事件对象
+ *  @cb function 回调事件
+*/
+export function clickOutSide (el, mouse, cb) {
+  return el.contains(mouse.target)
+}

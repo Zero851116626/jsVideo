@@ -1,4 +1,4 @@
-import {createDom, dealTimeFormat, getDomStyle} from '../utils/tools'
+import {createDom, dealTimeFormat, getDomStyle, clickOutSide} from '../utils/tools'
 import Bus from '../utils/bus'
 /**
  * params: 
@@ -228,8 +228,6 @@ export default class ZyfVido{
     // 给进读条绑定点击事件
     this.bindFunction(this.progressLine, 'click', (e)=>{
       if (e.target === this.progressControlBtn) return
-      console.log('this', this)
-      console.log(this.timer)
       clearInterval(this.timer)
       let pos = e.offsetX - 5
       this.setVideoPlayProgress(pos)
@@ -246,10 +244,17 @@ export default class ZyfVido{
     
 
     // 播放速度选择器的出现与否
-    this.bindFunction(this.speedDom, 'click', ()=>{
-      console.log('倍速')
-      this.speedBox.classList.toggle('unshow')
+    this.bindFunction(this.speedDom, 'click', (e)=>{
+      if (this.speedBox.classList.contains('unshow')) {
+        this.speedBox.classList.remove('unshow')
+        window.addEventListener('click', (e)=>{
+          if (!clickOutSide(this.speedBox, e)) {
+            this.speedBox.classList.add('unshow')
+          }
+        }, 'once')
+      }
     })
+
     // 修改播放速度
     this.bindFunction(this.speedBox, 'click', (e)=>{
       this.setPlaySpeed(Number.parseFloat(e.target.innerHTML))
@@ -258,15 +263,25 @@ export default class ZyfVido{
 
 
     // 全屏播放
+    // 全屏与退出全屏的api是异步的
     this.bindFunction(this.fullScreenBtn, 'click', ()=>{
+      // debugger
       if (!this.fullScreen) {
         this.fullScreen = true
-        console.log(this.wrap)
-        this.wrap.requestFullscreen()
-        console.dir(this.wrap)
+        let fullScreenPromise = this.wrap.requestFullscreen()
+        fullScreenPromise.then(()=>{
+          this.width = getDomStyle(this.controls).width
+          let left = this.video.currentTime / this.video.duration * this.width
+          this.setControlBtnPos(left)
+        })
       } else {
         this.fullScreen = false
-        document.exitFullscreen();
+        let exitFullScreenPromise = document.exitFullscreen();
+        exitFullScreenPromise.then(()=>{
+          this.width = getDomStyle(this.controls).width
+          let left = this.video.currentTime / this.video.duration * this.width
+          this.setControlBtnPos(left)
+        })
       }
     })
   }
@@ -278,20 +293,18 @@ export default class ZyfVido{
 
   // 播放时触发
   normalPlay(){
-    let widthPerSecond = Number.parseInt(this.width / this.video.duration)
+    let widthPerSecond = Number.parseFloat(this.width / this.video.duration)
     this.updateProgress(this.video.currentTime * 100)
     this.video.play()
     this.playStatus = true
     this.playBtn.classList.remove('icon-bofang')
     this.playBtn.classList.add('icon-zanting')
     this.timer = setInterval(()=>{
-      console.log('111')
       // 更新currentTime
       this.updateProgress(this.video.currentTime * 100)
       // 更新位置
       // 当前位置+1s位置
-      let currentPos = Number.parseInt(this.progressControlBtn.style.left || 0) + widthPerSecond
-      console.log(currentPos)
+      let currentPos = Number.parseFloat(this.progressControlBtn.style.left || 0) + widthPerSecond
       this.setControlBtnPos(currentPos)
     }, 500)
   }
@@ -313,13 +326,13 @@ export default class ZyfVido{
   }
   progressBtnMove(e){
     this.progressValue.endX = e.clientX
-    let left = Number.parseInt(this.progressControlBtn.style.left || 0)
+    let left = Number.parseFloat(this.progressControlBtn.style.left || 0)
     this.progressControlBtn.style.left = Math.max(0, Math.min(left + (this.progressValue.endX - this.progressValue.startX ), this.width - 10)) + 'px'
     this.progressValue.startX = e.clientX
 
     this.progressFinished.style.width = this.progressControlBtn.style.left
     // 处理当前时间
-    this.setVideoPlayProgress(Number.parseInt(this.progressControlBtn.style.left || 0))
+    this.setVideoPlayProgress(Number.parseFloat(this.progressControlBtn.style.left || 0))
   }
   finishMove(){
     bus.emit('mouseup')
@@ -327,8 +340,6 @@ export default class ZyfVido{
   whenMouseUp(e){
     this.wrap.removeEventListener('mousemove', this.dragProgressBtn)
     bus.clear('move')
-    console.log('currentTime---------', this.video.currentTime)
-    this.wrap.removeEventListener('mouseup', this.finishMove)
     bus.clear('mouseup')
   }
   setVideoPlayProgress(left){
@@ -341,8 +352,11 @@ export default class ZyfVido{
     this.video.currentTime = currentTime / 100
   }
   setControlBtnPos(length){
-    this.progressControlBtn.style.left = length + 'px'
-    this.progressFinished.style.width = this.progressControlBtn.style.left
+    // 要减去按钮的一半宽度
+    if (length + 10 <= this.width) {
+      this.progressControlBtn.style.left = length + 'px'
+      this.progressFinished.style.width = this.progressControlBtn.style.left
+    }
   }
   // 绑定方法
   bindFunction(node, type, cb, boolean = false){
@@ -353,7 +367,6 @@ export default class ZyfVido{
     this.bindFunction(this.video, 'canplay', ()=>{
       // 此处获取时间为s，但是方法内处理的时间为mm
       let totalTime = this.video.duration * 100
-      console.log(this.totalTime)
       this.totalTime.innerHTML = dealTimeFormat(totalTime)
     })
   }
